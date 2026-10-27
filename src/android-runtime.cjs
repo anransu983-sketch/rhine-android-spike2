@@ -44,6 +44,8 @@ async function execute(message) {
         }
         session = message.session;
         const current = session;
+        // Build marker: proves in the log itself which runtime is running.
+        send({ type: 'runtime-version', session: current, version: 'diag2' });
         // Spike diagnostic: prove TMPDIR / env propagation on both threads.
         send({
             type: 'runtime-env',
