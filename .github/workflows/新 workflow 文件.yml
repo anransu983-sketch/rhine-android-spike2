@@ -1,0 +1,123 @@
+name: Build Android debug APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout spike repo
+        uses: actions/checkout@v4
+
+      - name: Clone upstream Rhine (bridge source only)
+        run: git clone --depth 1 https://github.com/MikeQu223/Rhine-Music-Database upstream
+
+      - name: Set up Node 24 (bridge bundling)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Generate bridge from upstream (do NOT commit the output)
+        run: |
+          set -e
+          cd upstream
+          npm ci
+          cd MusicBridge && npm ci && cd ..
+          # bundle-bridge.cjs: argv[2]=source dir, argv[3]=output dir.
+          # It writes generated files into the source dir, then esbuild-bundles
+          # worker.cjs (target node22) into <output>/MusicBridge/worker.cjs,
+          # plus xhr-sync-worker.js, modules/ placeholders and data/.
+          node scripts/bundle-bridge.cjs MusicBridge ../bridge-build
+          cp ../src/android-runtime.cjs ../bridge-build/MusicBridge/android-runtime.cjs
+          ls -lh ../bridge-build/MusicBridge/worker.cjs ../bridge-build/MusicBridge/xhr-sync-worker.js
+          test -s ../bridge-build/MusicBridge/worker.cjs
+          # Layout expected by NodeBridge.prepareBridge(): assets:/rhine-bridge
+          mkdir -p ../src/android/assets/rhine-bridge
+          cp -r ../bridge-build/* ../src/android/assets/rhine-bridge/
+          du -sh ../src/android/assets/rhine-bridge
+          find ../src/android/assets/rhine-bridge -type f | sort
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # NOTE: ubuntu-latest runners already ship Android SDK (ANDROID_HOME
+      # = /usr/lib/android-sdk). android-actions/setup-android@v3 failed
+      # deterministically in 3 runs at this step, so it is removed; the next
+      # step installs the exact packages we need via sdkmanager.
+
+      - name: Install Android SDK packages
+        run: |
+          set -e
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/lib/android-sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" "platforms;android-36" "build-tools;36.1.0" "ndk;27.2.12479018"
+          ls "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+
+      - name: Install Qt 6.12.0 (aqtinstall, no Qt account needed)
+        run: |
+          set -e
+          pip install aqtinstall==3.3.0
+          aqt install-qt linux desktop 6.12.0 gcc_64 -m qtmultimedia qtshadertools --outputdir "$GITHUB_WORKSPACE/Qt"
+          aqt install-qt linux android 6.12.0 android_arm64_v8a -m qtmultimedia qtshadertools --outputdir "$GITHUB_WORKSPACE/Qt"
+          ls "$GITHUB_WORKSPACE/Qt/6.12.0/android_arm64_v8a/bin/qt-cmake"
+          ls "$GITHUB_WORKSPACE/Qt/6.12.0/gcc_64/bin/androiddeployqt"
+
+      - name: Download and verify NodeMobile (digidem, Android full)
+        run: |
+          set -e
+          curl -L -o nodejs-mobile-android-24.20.0-0.zip \
+            https://github.com/digidem/nodejs-mobile/releases/download/v24.20.0-0/nodejs-mobile-android-24.20.0-0.zip
+          echo "f5ffbaf4f2679fa9180b0758c637c2f8fc8828300f95129badf213a028fb37bb  nodejs-mobile-android-24.20.0-0.zip" | sha256sum -c -
+          mkdir -p node24
+          unzip -q nodejs-mobile-android-24.20.0-0.zip -d node24-tmp
+          # Zip root already contains bin/ and include/; normalise to node24/
+          if [ -d node24-tmp/bin ]; then mv node24-tmp/bin node24-tmp/include node24/; else mv node24-tmp/* node24/; fi
+          test -f node24/bin/arm64-v8a/libnode.so
+          test -f node24/include/node/node.h
+          ls -lh node24/bin/arm64-v8a/libnode.so
+
+      - name: Configure and build (Qt Android, arm64-v8a, Debug)
+        run: |
+          set -e
+          export QT_ANDROID="$GITHUB_WORKSPACE/Qt/6.12.0/android_arm64_v8a"
+          export QT_HOST="$GITHUB_WORKSPACE/Qt/6.12.0/gcc_64"
+          export QT_HOST_PATH="$QT_HOST"
+          "$QT_ANDROID/bin/qt-cmake" -S src -B build-android \
+            -DQT_HOST_PATH="$QT_HOST" \
+            -DANDROID_SDK_ROOT="$ANDROID_HOME" \
+            -DANDROID_NDK_ROOT="$ANDROID_HOME/ndk/27.2.12479018" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DANDROID_ABI=arm64-v8a \
+            -DNODE_INCLUDE_DIR="$GITHUB_WORKSPACE/node24/include" \
+            -DNODE_LIB="$GITHUB_WORKSPACE/node24/bin/arm64-v8a/libnode.so"
+          cmake --build build-android -j2
+
+      - name: Package APK with androiddeployqt
+        run: |
+          set -e
+          export QT_HOST="$GITHUB_WORKSPACE/Qt/6.12.0/gcc_64"
+          "$QT_HOST/bin/androiddeployqt" \
+            --input build-android/android-RhineSpike-deployment-settings.json \
+            --output build-android/android-build \
+            --apk --gradle
+          find build-android/android-build -name "*.apk" -exec ls -lh {} \;
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: RhineSpike-debug-apk
+          path: build-android/android-build/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
