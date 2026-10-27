@@ -61,7 +61,7 @@ async function execute(message) {
         // Fall back to direct worker.cjs if the wrapper is missing.
         const wrapper = path.join(path.dirname(message.script), 'worker-wrapper.cjs');
         const useWrapper = fs.existsSync(wrapper);
-        send({ type: 'runtime-version', session: current, version: useWrapper ? 'diag3-wrapper' : 'diag3-direct' });
+        send({ type: 'runtime-version', session: current, version: useWrapper ? 'diag4-wrapper' : 'diag4-direct' });
         worker = new Worker(useWrapper ? wrapper : message.script, {
             workerData: useWrapper ? { script: message.script, tmpdir: message.env ? message.env.TMPDIR : undefined } : undefined,
             env: { ...process.env, ...message.env },
