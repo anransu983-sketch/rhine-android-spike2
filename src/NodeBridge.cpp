@@ -147,7 +147,9 @@ void NodeBridge::onReadyRead() {
             continue;
         }
         const QString type = msg.value(QStringLiteral("type")).toString();
-        if (type == QStringLiteral("runtime-env")) {
+        if (type == QStringLiteral("runtime-version")) {
+            appendLog(QStringLiteral("runtime version=") + msg.value(QStringLiteral("version")).toString());
+        } else if (type == QStringLiteral("runtime-env")) {
             appendLog(QStringLiteral("runtime-env tmpdir=") + msg.value(QStringLiteral("tmpdir")).toString()
                       + QStringLiteral(" envTMPDIR=") + msg.value(QStringLiteral("envTmpdir")).toString()
                       + QStringLiteral(" node=") + msg.value(QStringLiteral("nodeVersion")).toString());
