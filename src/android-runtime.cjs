@@ -19,6 +19,8 @@
 //  Qt input is forwarded to Worker stdin as base64.
 const net = require('node:net');
 const os = require('node:os');
+const path = require('node:path');
+const fs = require('node:fs');
 const readline = require('node:readline');
 const { Worker } = require('node:worker_threads');
 
@@ -54,7 +56,14 @@ async function execute(message) {
             envTmpdir: process.env.TMPDIR || null,
             nodeVersion: process.version,
         });
-        worker = new Worker(message.script, {
+        // diag3: go through worker-wrapper.cjs so TMPDIR is set inside
+        // the Worker thread itself (NodeMobile ignores Worker env).
+        // Fall back to direct worker.cjs if the wrapper is missing.
+        const wrapper = path.join(path.dirname(message.script), 'worker-wrapper.cjs');
+        const useWrapper = fs.existsSync(wrapper);
+        send({ type: 'runtime-version', session: current, version: useWrapper ? 'diag3-wrapper' : 'diag3-direct' });
+        worker = new Worker(useWrapper ? wrapper : message.script, {
+            workerData: useWrapper ? { script: message.script, tmpdir: message.env ? message.env.TMPDIR : undefined } : undefined,
             env: { ...process.env, ...message.env },
             stdin: true,
             stdout: true,
