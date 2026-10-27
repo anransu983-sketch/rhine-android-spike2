@@ -35,6 +35,7 @@ jobs:
           # plus xhr-sync-worker.js, modules/ placeholders and data/.
           node scripts/bundle-bridge.cjs MusicBridge ../bridge-build
           cp ../src/android-runtime.cjs ../bridge-build/MusicBridge/android-runtime.cjs
+          cp ../src/worker-wrapper.cjs ../bridge-build/MusicBridge/worker-wrapper.cjs
           ls -lh ../bridge-build/MusicBridge/worker.cjs ../bridge-build/MusicBridge/xhr-sync-worker.js
           test -s ../bridge-build/MusicBridge/worker.cjs
           # Layout expected by NodeBridge.prepareBridge(): assets:/rhine-bridge
