@@ -20,7 +20,7 @@ ApplicationWindow {
         spacing: 12
 
         Label {
-            text: "Rhine Spike"
+            text: "Rhine Spike diag2"
             font.pixelSize: 28
             font.bold: true
         }
