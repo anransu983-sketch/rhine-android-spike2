@@ -49,12 +49,18 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # NOTE: ubuntu-latest runners already ship Android SDK (ANDROID_HOME
+      # = /usr/lib/android-sdk). android-actions/setup-android@v3 failed; Qt 6.12 desktop arch fixed gcc_64 -> linux_gcc_64 (verified by aqt list-qt)
+      # deterministically in 3 runs at this step, so it is removed; the next
+      # step installs the exact packages we need via sdkmanager.
 
       - name: Install Android SDK packages
         run: |
           set -e
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/lib/android-sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" "platforms;android-36" "build-tools;36.1.0" "ndk;27.2.12479018"
@@ -64,7 +70,7 @@ jobs:
         run: |
           set -e
           pip install aqtinstall==3.3.0
-          aqt install-qt linux desktop 6.12.0 gcc_64 -m qtmultimedia qtshadertools --outputdir "$GITHUB_WORKSPACE/Qt"
+          aqt install-qt linux desktop 6.12.0 linux_gcc_64 -m qtmultimedia qtshadertools --outputdir "$GITHUB_WORKSPACE/Qt"
           aqt install-qt linux android 6.12.0 android_arm64_v8a -m qtmultimedia qtshadertools --outputdir "$GITHUB_WORKSPACE/Qt"
           ls "$GITHUB_WORKSPACE/Qt/6.12.0/android_arm64_v8a/bin/qt-cmake"
           ls "$GITHUB_WORKSPACE/Qt/6.12.0/gcc_64/bin/androiddeployqt"
