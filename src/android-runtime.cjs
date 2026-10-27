@@ -74,9 +74,12 @@ async function execute(message) {
             send({ type: 'worker-stderr', session: current, data: bytes.toString('base64') });
         });
         instance.on('online', () => send({ type: 'started', session: current }));
-        instance.on('error', () => send({ type: 'error', session: current }));
-        instance.on('exit', () => {
-            send({ type: 'finished', session: current });
+        // Diagnostic fix (2026-10-27 S26): previously this dropped the
+        // error object entirely, so Qt only saw {"type":"error","session":...}
+        // with no cause. Forward message + first 1000 chars of stack.
+        instance.on('error', (err) => send({ type: 'error', session: current, message: err ? String(err.message || err) : null, stack: err && err.stack ? String(err.stack).slice(0, 1000) : null }));
+        instance.on('exit', (code) => {
+            send({ type: 'finished', session: current, code: code });
             if (worker === instance) {
                 worker = undefined;
             }
@@ -98,7 +101,7 @@ async function execute(message) {
 readline.createInterface({ input: socket }).on('line', (line) => {
     commands = commands
         .then(() => execute(JSON.parse(line)))
-        .catch(() => {
-            send({ type: 'error', session });
+        .catch((err) => {
+            send({ type: 'error', session, message: err ? String(err.message || err) : null });
         });
 });
