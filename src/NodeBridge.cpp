@@ -163,6 +163,8 @@ void NodeBridge::onReadyRead() {
         } else if (type == QStringLiteral("output")) {
             QByteArray raw = QByteArray::fromBase64(msg.value(QStringLiteral("data")).toString().toLatin1());
             appendLog(QStringLiteral("worker output: ") + QString::fromUtf8(raw).left(500));
+        } else if (type == QStringLiteral("finished")) {
+            appendLog(QStringLiteral("worker finished code=") + msg.value(QStringLiteral("code")).toVariant().toString());
         } else if (type == QStringLiteral("system-trust")) {
             // iOS-only path; plain worker.cjs must never emit this.
             appendLog(QStringLiteral("UNEXPECTED system-trust message (iOS-only, not answered)"));
